@@ -1,0 +1,182 @@
+---
+title: "Time Series Forecasting: Challenge 0"
+author: "Rubi Tonantzin Gutiérrez Villanueva"
+date: "Noviembre 2025"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  header-includes: 
+   \usepackage{xcolor}
+   \usepackage{luacolor}
+geometry: left = 0.7in, right = 0.7in, top = 0.5in, bottom =0.5in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kableExtra)
+library(corrplot)
+library(broom)
+```
+
+## Estimaciones de modelo de regresión lineal
+
+A continuación se estiman dos modelos de regresión lineal para ajustar el **consumo** trimestral a partir de variables macroeconomicas como el *ingreso*, *ahorro*, *producción* y *desempleo*. La base utilizada para dichas estimaciones es **US Change**, la cual contiene información trimestral sobre los cambios porcentuales en estas variables economicas desde el primer trimestre 1970 al cuarto trimestre de 2019 en Estados Unidos. 
+\vspace{5mm}
+
+
+```{r top10}
+uschange <- read.csv("US_change_full.csv")
+colnames(uschange) <- c("Cuatrimestre", "Consumo", "Ingreso", "Producción", 
+                        "Ahorro", "Desempleo")
+kable(head(uschange), caption = "Tasas de crecimiento para el consumo, ingreso,
+producción, ahorro y desempleo de 1970 a 2019")
+```
+
+En la siguiente tabla se muestran los principales estadísticos descriptivos de las variables. Se puede observa que el **ahorro** muestra mayor variabilidad en comparación con el resto de variables, mientras que el **desempleo** es la variable con menor variabilidad.
+\vspace{5mm}
+
+```{r summary}
+kable(summary(uschange[,2:6]))
+```
+
+
+```{r varianzas}
+var_consumo <- var(uschange$Consumo)
+```
+
+La varianza de la variable **consumo** es de `r var_consumo`, lo cual indica que no presenta una alta variabiliad dentro de la muestra analizada. 
+\vspace{5mm}
+
+
+En la siguiente tabla se muestran las varianzas y covarianzas de las variables económicas.^[En la diagonal de la tabla se presentan las varianzas, mientras que fuera de la diagonal se encuentran las covarianzas.] Como se mencionó anteriormente, la variable **ahorro** presenta con una varianza elevada, mientras el **desempelo** tiene menor varianza. Sin embargo, esta información no permite determinar el tipo de relación entre las variables, por lo que es necesario realizar un análisis de correlaciones.
+\vspace{5mm}
+
+```{r cov_var}
+cov_var <- cov(uschange[,2:6])
+kable(cov_var, caption = "Matriz de varianza - covarianza")
+```
+
+Para analizar la relación entre las variables económicas, resulta útil examinar la matriz de correlaciones, la cual permite identificar tanto la intensidad como la dirección de las asociaciones lineales entre las variables. En la siguiente tabla se presentan las correlaciones, entre los principales resultados se observa que existe una alta correlación positiva entre el *ingreso* y el *ahorro*, lo cual es consistente con la idea de que, a mayor ingreso, el ahorro también tiende a aumentar. Asimismo, se aprecia una alta correlación negativa entre el *desempleo* y la *producción*, lo que concuerda con la expectativa de que una caída en la productividad suele asociarse con un aumento en el desempleo.
+\vspace{5mm}
+
+```{r correlaciones}
+correlacion <- cov2cor(cov_var)
+kable(correlacion, caption = "Matriz de correlaciones")
+```
+
+Otra forma de visualizar la matriz de correlaciones es mediante un mapa de calor, en el cual los colores más intensos representan correlaciones más fuertes, mientras que los colores menos intensos indican relaciones más débiles.
+\vspace{5mm}
+
+```{r grafica_corr}
+corrplot.mixed(correlacion, lower = "number", upper = "color", diag = "u",
+               tl.pos ="lt",
+tl.cex = 0.7, number.cex = 0.7)
+```
+
+Con los resultados anteriores, se estima un modelo de regresión lineal simple para explicar el **consumo**, el cual se especifica de la siguiente manera:
+
+$$
+consumo_i = \beta_0 + \beta_1 produccion_i + e_i
+$$
+
+A continuación, se presentan los resultados del modelo de regresión lineal simple que relacionan al consumo con la producción. El coeficienta asociado a la producción es positivo y estadisticamente significativo, al menos al 1\%, esto indica que a un aumento de un punto percentual en la producción el consumo aumentará en **0.2218** puntos porcentuales. 
+
+En cuanto al ajuste del modelo, el coeficiente $R^2 = 0.28$ señala que aproximadamente el **28\%** de la variabilidad del *consumo* se explica por la *producción*. Mientras, el estadístico $F$ confirma que existe una relación significativa entre el *consumo* y la *producción*.
+\vspace{5mm}
+
+
+```{r reg_simple}
+reg_simple <- lm(Consumo ~ Producción, data = uschange)
+summary(reg_simple)
+```
+
+
+En la siguiente gráfica se representa la línea de regresión estimada junto con el modelo nulo. Se observa que varios valores se encuentran alejados de la línea de regresión, lo cual es consistente con el ajuste del modelo reflejado en el valor de $R^2$.
+
+\vspace{5mm}
+
+```{r dis_simple}
+ggplot(uschange, aes(y = Consumo, x = Producción))+
+  geom_point(col = "blue", size = 2) +
+  geom_hline(yintercept = mean(uschange$Consumo), col = "green")+
+  annotate("text", x = 3.9, y = 0.6, label = "Modelo nulo")+
+  geom_abline(intercept = reg_simple$coefficients[1], 
+              slope = reg_simple$coefficients[2], col = "red") +
+  annotate("text", x = -6, y = -1.2, label = "Regresión simple")+
+  theme_minimal() +
+  xlab("Producción") +
+  ylab("Consumo")+
+  ggtitle("Relación entre el consumo y la producción")
+```
+
+En la siguiente gráfica se muestra el comportamiento de los residuales del modelo respecto a los valores ajustados. Se observa que la varianza de los residuales no es constante y parece disminuir conforme aumentan los valores ajustados, lo cual sugiere la posible presencia de heterocedasticidad en el modelo ajustado.
+
+\vspace{5mm}
+
+```{r res_simple}
+uschange$residuales <- reg_simple$residuals
+uschange$pred_consumo <- reg_simple$fitted.values
+reg_sim_res <- lm(residuales ~ pred_consumo, data = uschange)
+ggplot(uschange, aes(y = residuales, x = pred_consumo))+
+  geom_point(col = "blue", size = 2) +
+  geom_abline(intercept = reg_sim_res$coefficients[1],
+              slope = reg_sim_res$coefficients[2], col = "red") +
+  theme_minimal() +
+  xlab("Valores ajustados del consumo") +
+  ylab("Residuales del modelo")+
+  ggtitle("Relación entre los valores ajustados y los residuales de la regresión simple")
+```
+Con los resultados anteriores, se estima un modelo de regresión lineal multiple para explicar el **consumo**, el cual se especifica de la siguiente manera:
+
+$$
+consumo_i = \beta_0 + \beta_1 ahorro_i + \beta_2 ingreso_i + e_i
+$$
+
+El modelo de regresión múltiple estima el **consumo** a partir de dos variables: *ahorro* e *ingreso*. Ambas variables con coeficientes estadísticamente significativos al menos al 1\% lo que indica que las dos variables tienen un efecto relevante sobre el consumo.
+
+Por un lado, el coeficiente del *ahorro* es negativo y significativo, lo que sugiere que, manteniendo constante el ingreso, un incremento en el ahorro se asocia a una pequeña disminución en el consumo. Lo cual es coherente con la idea de \color{blue} ahorrar es reservar parte de los ingresos actuales para asegurar el consumo futuro.
+
+\normalcolor
+Por otra parte, el coeficiente del *ingreso* es positivo y significativo, lo que indica que, manteniendo el ahorro constante, un incremento en un punto porcentual en el ingreso se asocia a un incremento aproximadamente dek **0.08366** puntos porcentuales en el consumo. 
+
+El coeficiente $R^2 = 0.7373$ indica que aproximadamente el 73.73\% de la variabilidad del consumo es explicada por el ingreso y el ahorro. Mientras, el estadístico $F$ indica que el modelo en su conjutno es altamente significativo. 
+
+
+```{r reg_multiple}
+reg_multiple <- lm(Consumo ~ Ahorro + Ingreso, data = uschange)
+summary(reg_multiple)
+```
+
+
+En la siguiente gráfica se muestra el comportamiento de los residuales del modelo múltiple respecto a los valores ajustados. Se observa que la varianza de los residuales  es constante, lo cual sugiere homocesdaticidad en los residuales.
+
+```{r res_multiple}
+uschange$residuales_mult <- reg_multiple$residuals
+uschange$pred_consumo_mult <- reg_multiple$fitted.values
+reg_mult_res <- lm(residuales_mult ~ pred_consumo_mult, data = uschange)
+ggplot(uschange, aes(y = residuales_mult, x = pred_consumo_mult))+
+  geom_point(col = "blue", size = 2) +
+  geom_abline(intercept = reg_mult_res$coefficients[1],
+              slope = reg_mult_res$coefficients[2], col = "red") +
+  theme_minimal() +
+  xlab("Valores ajustados del consumo") +
+  ylab("Residuales del modelo")+
+  ggtitle("Relación entre los valores ajustados y los residuales de la regresión simple")
+```
+
+
+Por último, en la siguiente tabla se presentan los criterios de información AIC y BIC, los cuales indican que el modelo múltiple ofrece un mejor desempeño en comparación con el modelo simple. Además, tanto la bondad de ajuste $R^2$ y $R^2_{ajustada}$ muestran que el modelo múltiple explica una mayor proporción de la variabilidad del consumo. Con base en estos resultados, se propone como mejor modelo \color{red} la regresión múltiple.
+\vspace{5mm}
+\normalcolor
+
+\scriptsize
+```{r comp}
+results <- bind_rows(glance(reg_simple), glance(reg_multiple))
+results <- as.data.frame(results)
+rownames(results) <- c("Regresión simple", "Regresión múltiple")
+kable(results, row.names = TRUE, caption = "Criterios de información", digits = 2, longtable = TRUE)
+```
+
+\normalsize

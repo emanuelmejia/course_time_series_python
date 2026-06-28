@@ -1,0 +1,238 @@
+---
+title: "Operación por Pares"
+subtitle: "Cointegración"
+author: "Emanuel Mejia"
+output:
+  pdf_document:
+    number_sections: yes
+    fig_caption: True
+header-includes:
+  - \usepackage{caption}
+fontsize: 11pt
+geometry: margin=1in
+---
+
+```{r message=FALSE, warning=FALSE}
+library(quantmod)
+library(tseries)
+```
+
+
+# Pruebas de Cointegración
+
+## Prueba de Engle-Granger
+
+La hipótesis nula de la prueba de Engle-Granger es que no existe cointegración, y concluimos que hay cointegración solo si rechazamos esta hipótesis.
+
+$H_0:$ No existe cointegración
+
+$H_1:$ Existe cointegración
+
+
+**Pasos de esta prueba:**
+
+1. Realizar una prueba de raíz unitaria (como Dickey-Fuller aumentada) para verificar si $y$ y $x$ tienen raíces unitarias. Si ambas son integradas del mismo orden (usualmente $I(1)$), ir al siguiente paso.
+
+2. Ejecutar una regresión de $y$ sobre $x$ y guardar los residuos.
+
+3. Realizar una prueba de raíz unitaria sobre los residuos (sin incluir constante ni tendencia).
+
+4. Si se rechaza la hipótesis de raíz unitaria, concluimos que $y$ y $x$ están cointegradas. Si no se rechaza, concluimos que no hay cointegración.
+
+Por lo tanto, si $y_t$ y $x_t$ están cointegradas, en $y_t = \alpha + \beta x_t + \epsilon_t$, el término de error $\epsilon_t$ será $I(0)$. Si no, $\epsilon_t$ será $I(1)$. Así, se puede probar la existencia de cointegración evaluando la raíz unitaria en los residuos OLS.
+
+## Prueba de Phillips-Ouliaris
+
+La prueba de Engle-Granger asume que los errores de regresión son independientes y con varianza constante, lo cual raramente ocurre en la práctica. La prueba de Phillips-Ouliaris mejora la prueba de Engle-Granger al considerar errores que no son ruido blanco.
+
+$H_0$: No existe cointegración
+
+$H_1$: Existe cointegración
+
+## Prueba de Johansen
+
+Otra mejora sobre la prueba de Engle-Granger es la prueba desarrollada por Johansen, la cual permite detectar múltiples vectores de cointegración (útil en modelos con más de dos variables).
+
+# Pairs Trading (Operación por Pares)
+
+Recordemos que si dos series de tiempo están cointegradas, permanecen "cerca" una de la otra en el largo plazo. En otras palabras, el spread (residuo OLS) entre ellas, $z_t = x_{t}-\beta y_{t}$ es media-revertiente.
+
+Esta propiedad de reversión a la media del spread puede aprovecharse para hacer operaciones de trading, y comúnmente se conoce como "pairs trading" o "arbitraje estadístico".
+
+**¿Cómo funciona?**
+
+Se asume que el spread $z_t = x_{t}-\beta y_{t}$ es estacionario o media-revertiente con media cero.
+
+## Escenario 1: El spread es bajo $z_t < -s_0$
+
+Esto sugiere que la acción $x$ está infravalorada y la acción $y$ sobrevalorada.
+
+**Estrategia - Comprar el spread:**
+
+**Comprar la acción $x$. Vender en corto la acción $y$. **
+
+Cerrar las posiciones cuando el spread vuelva a cero después de $n$ periodos (es decir $z_{t+n}=0$).
+
+## Escenario 2: El spread es alto $z_t > s_0$
+
+Esto sugiere que la acción $x$ está sobrevalorada y la acción $y$ infravalorada.
+
+**Estrategia - Vender el spread:**
+
+**Vender en corto la acción $x$. Comprar la acción $y$. **
+
+Cerrar las posiciones cuando el spread vuelva a cero después de $n$ periodos (es decir $z_{t+n}=0$)
+
+## Diseño del Pairs Trading
+
+### Selección de Pares
+
+Identificar pares de acciones que potencialmente estén cointegradas.
+
+Criterios comunes para seleccionar los pares:
+
+- Pertenencia al mismo sector o industria.
+
+- Comportamiento histórico similar en precios.
+
+- Alta correlación como punto de partida (aunque correlación $\ne$ cointegración).
+
+### Prueba de Cointegración
+
+Verificar si los pares seleccionados están efectivamente cointegrados.
+
+Aplicar pruebas estadísticas como:
+
+- Engle-Granger
+
+- Phillips-Ouliaris
+
+- Johansen
+
+Si la cointegración se confirma, se puede considerar que los precios tienen una relación de largo plazo estable.
+
+### Diseño de la Estrategia de Trading
+
+Estudiar la dinámica del spread entre las dos acciones:
+
+$z_t = x_{t}-\beta y_{t}$
+
+Establecer reglas claras de trading:
+
+- **Umbrales de entrada** (por ejemplo, cuando $z_t$ supera $\pm 2$ o $\pm 3$ desviaciones estándar).
+- **Condiciones de salida** (cuando $z_t$ revierte a la media o a un valor objetivo).
+- **Gestión del riesgo** (stop-loss, tamaño de la posición, etc.).
+
+El objetivo es explotar las desviaciones temporales del equilibrio para obtener beneficios cuando el spread vuelve a su valor esperado.
+
+# Netflix VS Amazon
+
+Centrémonos en el par NFLX vs. AMZN, que corresponde a las acciones de Netflix y Amazon.
+
+## Obtener precios de acciones
+
+Con el siguiente código podemos obtener los precios de las acciones usando el paquete `quantmod`.
+
+```{r}
+inicio <- as.Date("2021-01-01")
+fin <- as.Date("2022-06-01")
+stocks <- c("AMZN", "NFLX")
+
+# Cargamos datos de dos acciones
+# auto.assign=FALSE para permitir que el objeto se guarde 
+# en variable local y no en la sesión de R
+amazon <- getSymbols("AMZN", src = "yahoo", from = inicio, to = fin, 
+                    auto.assign = FALSE, return.class= "ts") 
+netflix <- getSymbols("NFLX", src = "yahoo", from = inicio, to = fin, 
+                     auto.assign = FALSE, return.class= "ts")
+```
+
+## Análisis Inicial
+
+Graficamos los precios de cierre de NFLX y AMZN, las funciones de autocorrelación, y examinamos estacionariedad.
+
+```{r}
+amazon_cierre <- amazon[,4]
+netflix_cierre <- netflix[,4]
+plot(cbind(amazon_cierre, netflix_cierre))
+```
+
+Los gráficos de series de tiempo de Netflix y Amazon no muestran estacionariedad, hay una disminución general en los precios desde 2021.
+
+```{r}
+forecast::Acf(cbind(amazon_cierre, netflix_cierre))
+```
+
+Las funciones de autocorrelación (ACF) decaen muy lentamente, lo cual sugiere que estas series podrían tener una raíz unitaria.
+
+Además, a partir de los gráficos de correlación cruzada, podemos ver que la correlación entre los precios de cierre de Amazon y Netflix es positiva.
+
+Pero debemos tener cuidado. Esta correlación positiva podría deberse a tendencias estocásticas “ocultas” en estas variables. Debemos verificar si están cointegradas o no.
+
+Parece que la varianza cambia con el tiempo; utilizaremos una **transformación logarítmica.**
+
+## Pruebas de Raíz Unitaria
+
+Realizamos pruebas de raíz unitaria para los precios de cierre de NFLX y AMZN. ¿Son estacionarias? ¿Están ambas integradas del mismo orden?
+
+```{r, warning=FALSE}
+tseries::adf.test(log(amazon_cierre), alternative = "stationary")
+
+tseries::adf.test(log(netflix_cierre), alternative = "stationary")
+
+tseries::adf.test(diff(log(amazon_cierre)), alternative = "stationary")
+
+tseries::adf.test(diff(log(netflix_cierre)), alternative = "stationary")
+```
+
+Para ambas series logarítmicas de los precios de cierre de Netflix y Amazon, el *p-value* es mucho mayor al 5%, por lo que no rechazamos la hipótesis nula de no estacionariedad.
+
+En cambio, para sus primeras diferencias, ambos *p-values* son menores al 5%, y rechazamos la hipótesis nula de no estacionariedd (y por lo tanto otra raíz unitaria).
+
+Por lo tanto, tanto los logaritmos de los precios de cierre de Amazon como de Netflix tienen una raíz unitaria y son $I(1)$. Podemos proceder al siguiente paso del análisis.
+
+## Pruebas de Cointegración
+
+Realizar la prueba de Engle-Granger para cointegración
+
+```{r}
+coint_reg <- lm(log(netflix_cierre) ~ log(amazon_cierre))
+coef(summary(coint_reg))
+coint_res <- ts(coint_reg$res)
+pp.test(coint_res)
+```
+
+Para probar la cointegración usando la prueba de Engle-Granger, primero realizamos una regresión del logaritmo del precio de cierre de Netflix sobre el logaritmo del precio de cierre de Amazon, y luego aplicamos una prueba de raíz unitaria sobre los residuos.
+
+Con base en la prueba de raíz unitaria de Phillips-Perron, el *p-value* es menor al 5%, por lo que rechazamos la hipótesis nula de raíz unitaria en los residuos. Esto indica que la prueba de Engle-Granger proporciona evidencia de que los logaritmos de los precios de cierre de Netflix y Amazon están cointegrados, ya que los residuos son estacionarios.
+
+```{r}
+po.test(cbind(log(netflix_cierre),log(amazon_cierre)))
+```
+
+También podemos utilizar una prueba de cointegración más robusta, como la prueba de cointegración de Phillips-Ouliaris. Según esta prueba, no se rechaza la hipótesis nula de que no existe cointegración al 5% de significancia, pero sí se rechaza al 10%.
+
+## Estrategia
+
+Graficar el spread (residuo) y discutir una posible estrategia de trading.
+
+```{r}
+stockSpread<- coint_reg$residuals
+plot(stockSpread, main = "NFLX vs AMZN", type = "l")
+sd(stockSpread)
+abline(a=mean(stockSpread), b=0,  col= "blue")
+abline(a=sd(stockSpread), b=0,  col= "red")
+abline(a=-sd(stockSpread), b=0, col = "red")
+```
+
+Al analizar el spread de los residuos, podemos definir señales de trading para abrir y cerrar posiciones. Podemos usar las desviaciones estándar del spread como umbrales.
+
+Por ejemplo, consideremos que nuestras señales de trading se basan en una desviación estándar de los residuos, es decir, `r round(sd(stockSpread),4)` y `r round(-sd(stockSpread),4)`, respectivamente.
+
+Entonces, nuestra estrategia sería la siguiente:
+
+- Cuando el spread está por encima de `r round(sd(stockSpread),4)`, esto significa que Netflix está sobrevaluado en comparación con Amazon, por lo tanto, vendemos NFLX y compramos AMZN.
+
+- Cuando el spread está por debajo de `r round(-sd(stockSpread),4)`, esto indica que Netflix está subvaluado respecto a Amazon, por lo tanto, compramos NFLX y vendemos AMZN.
+
+Y siempre que el spread vuelva a converger hacia 0, cerramos la posición.
